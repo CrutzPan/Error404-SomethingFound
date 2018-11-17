@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        tools:context=".MainActivity">
+
+    <FrameLayout
+            android:id="@+id/act_bar"
+            android:layout_width="match_parent"
+            android:layout_height="?actionBarSize"
+            android:background="@android:color/white">
+
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:layout_gravity="center"
+                android:textColor="@color/colorAccent"
+                android:fontFamily="@font/ubuntu_b"
+                android:textSize="16sp"/>
+
+    </FrameLayout>
+
+    <FrameLayout
+            android:id="@+id/set_home_frame"
+            android:layout_width="144dp"
+            android:layout_height="144dp"
+            android:layout_centerInParent="true"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="@drawable/frame_layout_background">
+
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/main_button_text"
+                android:layout_gravity="center"
+                android:textColor="@android:color/white"
+                android:textAllCaps="true"
+                android:textSize="18sp"
+                android:fontFamily="@font/ubuntu_b"/>
+
+    </FrameLayout>
+
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/set_home_frame"
+            android:padding="26dp"
+            android:text="@string/main_text_set"
+            android:textSize="18sp"
+            android:textAlignment="center"
+            android:fontFamily="@font/ubuntu_l"/>
+
+    <FrameLayout
+            android:id="@+id/info_screen_layout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="16dp"
+            android:background="@color/colorAccent"
+            android:visibility="gone">
+
+        <TextView
+                android:id="@+id/ip_addr_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="64dp"
+                android:text="Home IP: "
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:fontFamily="@font/ubuntu_l"/>
+
+        <android.support.design.widget.FloatingActionButton
+                android:id="@+id/close_session"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_gravity="center_horizontal|bottom"
+                android:src="@drawable/baseline_clear_black_24dp"
+                app:rippleColor="@color/colorAccent"
+                app:backgroundTint="@android:color/white"/>
+
+    </FrameLayout>
+
+</RelativeLayout>

@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">404 Something Found</string>
+    <string name="address_key">address_key</string>
+    <string name="config_on_key">config_on</string>
+
+    <string name="main_button_text">Set</string>
+    <string name="main_text_set">Click the button to set this place as your current home.</string>
+
+    <string name="notify_channel_key">welcome_notif_key</string>
+    <string name="notify_channel_name">Welcome notification</string>
+    <string name="notif_title">Hey there!</string>
+    <string name="notif_text">Welcome Home! Click on the notification to get more details.</string>
+</resources>
