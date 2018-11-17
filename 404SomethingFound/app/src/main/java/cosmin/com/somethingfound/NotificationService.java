@@ -28,7 +28,7 @@ public class NotificationService extends IntentService {
         }
 
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(getApplicationContext(), getApplicationContext().getString(R.string.notify_channel_key))
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.baseline_assistant_black_24dp)
                 .setContentTitle(getApplicationContext().getString(R.string.notif_title))
                 .setContentText(getApplicationContext().getString(R.string.notif_text))
                 .setContentIntent(contentIntent(getApplicationContext()))
@@ -36,10 +36,9 @@ public class NotificationService extends IntentService {
                 .setAutoCancel(true)
                 .setColor(ContextCompat.getColor(getApplicationContext(), R.color.colorAccent));
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             int priority;
             priority = NotificationCompat.PRIORITY_DEFAULT;
-
             notificationBuilder.setPriority(priority);
         }
         notificationManager.notify(10, notificationBuilder.build());

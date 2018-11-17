@@ -4,43 +4,51 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
-import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.preference.PreferenceManager;
 import android.text.format.Formatter;
-import android.util.Log;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 
 public class WifiDetector extends BroadcastReceiver {
 
     @Override
-    public void onReceive(Context context, Intent intent) {
+    public void onReceive(final Context context, Intent intent) {
 
-        if (intent.getBooleanExtra(WifiManager.EXTRA_SUPPLICANT_CONNECTED, false)) {
-            // Wait for Wifi connection.
-            while (!isConnectedToWifi(context));
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+        final SharedPreferences.Editor editor = sp.edit();
 
-            Log.d("smthFound", "CONNECTED");
+        int wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN);
+        switch (wifiState) {
+            case WifiManager.WIFI_STATE_ENABLED:
+                FirebaseDatabase db = FirebaseDatabase.getInstance();
+                DatabaseReference rf = db.getReference("404test");
+                rf.setValue("404-enabled");
+                editor.putBoolean(context.getString(R.string.confirm_btn_key), true);
+                editor.apply();
 
-            WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-            DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
-            String addr = Formatter.formatIpAddress(dhcpInfo.gateway);
+                WifiManager wifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
+                String addr = Formatter.formatIpAddress(dhcpInfo.gateway);
 
-            if (areYouHome(context, addr)) {
-                Intent notifyIntent = new Intent(context, NotificationService.class);
-                context.startService(notifyIntent);
-            }
+                if (areYouHome(context, addr)) {
+                    Intent notifyIntent = new Intent(context, NotificationService.class);
+                    context.startService(notifyIntent);
+                }
+
+                break;
+
+            case WifiManager.WIFI_STATE_DISABLED:
+                FirebaseDatabase db1 = FirebaseDatabase.getInstance();
+                DatabaseReference rf1 = db1.getReference("404test");
+                rf1.setValue("404-disabled");
+
+                editor.putBoolean(context.getString(R.string.confirm_btn_key), false);
+                editor.apply();
+
+                break;
         }
-        else {
-            Log.d("smthFound", "DISCONNECTED");
-        }
-    }
-
-    private boolean isConnectedToWifi(Context context) {
-        ConnectivityManager connMng = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = connMng.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-        return networkInfo.isConnected();
     }
 
     private boolean areYouHome(Context context, String addr) {

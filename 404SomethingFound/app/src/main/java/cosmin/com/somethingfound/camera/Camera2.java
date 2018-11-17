@@ -26,7 +26,7 @@ import java.util.*;
 public class Camera2 {
 
     public interface OnCamera {
-        void onCameraCaptured(Bitmap imageBitmap, int maxNumber);
+        void onCameraCaptured(Bitmap imageBitmap, int currentNumber, int maxNumber);
     }
     private OnCamera cameraCallback;
     public void setOnCameraCapturedListener(OnCamera l) {
@@ -34,6 +34,7 @@ public class Camera2 {
     }
 
     private Context context;
+    private int currentNumber;
     private int pictureNumber = 10;
     private int FPS;
     private long waitTime = System.currentTimeMillis();
@@ -84,7 +85,8 @@ public class Camera2 {
             buffer.get(imageData);
 
             Bitmap imageBitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.length);
-            cameraCallback.onCameraCaptured(imageBitmap, pictureNumber);
+            cameraCallback.onCameraCaptured(imageBitmap, currentNumber, pictureNumber);
+            currentNumber++;
 
             if (rawImage != null) {
                 rawImage.close();
@@ -115,13 +117,15 @@ public class Camera2 {
     }
 
     private void closeThread() {
-        thread.quitSafely();
-        try {
-            thread.join();
-            thread = null;
-            handler = null;
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (thread != null) {
+            thread.quitSafely();
+            try {
+                thread.join();
+                thread = null;
+                handler = null;
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -130,8 +134,9 @@ public class Camera2 {
         try {
             for (String id : cameraManager.getCameraIdList()) {
                 CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(id);
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT)
-                    continue;
+                // ONLY BY TESTING - FRONT
+//                if (characteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_FRONT)
+//                    continue;
                 cameraId = id;
 
                 StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -174,6 +179,7 @@ public class Camera2 {
                             try {
                                 captureRequest = captureRequestBuilder.build();
                                 captureSession = session;
+                                currentNumber = 0;
                                 for (int i = 0; i < pictureNumber; i++) {
                                     captureSession.capture(captureRequest, captureCallback, handler);
                                 }

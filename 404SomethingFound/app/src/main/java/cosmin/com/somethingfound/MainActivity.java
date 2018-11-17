@@ -9,45 +9,61 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
+import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
+import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.CardView;
 import android.text.format.Formatter;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewAnimationUtils;
+import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.ScaleAnimation;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.Frame;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+
 import cosmin.com.somethingfound.camera.Camera2;
 import cosmin.com.somethingfound.camera.SafeFaceDetector;
 
 import java.util.ArrayList;
 
-
 public class MainActivity extends AppCompatActivity implements Camera2.OnCamera {
 
     private WifiDetector mWifiDetector;
     private Camera2 mCamera2;
+    private FirebaseDatabase mDb;
+    private DatabaseReference m404Ref, m404RefData;
     private FrameLayout frLay, infoScreen;
     private FloatingActionButton fabCLose;
-    private TextView homeIpAddrInfo;
+    private TextView homeIpAddrInfo, mainSetText, tempInfo, humidityInfo;
+    private CardView homeConfirm;
 
+    private Thread faceAnalysisThread;
     private ArrayList<Bitmap> mBitmaps = new ArrayList<>();
 
     @Override
@@ -62,37 +78,63 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
         final SharedPreferences.Editor editor = sp.edit();
 
+        mDb = FirebaseDatabase.getInstance();
+        m404Ref = mDb.getReference("404test");
+        m404RefData = mDb.getReference("404sendintext");
+
         frLay = findViewById(R.id.set_home_frame);
         infoScreen = findViewById(R.id.info_screen_layout);
         fabCLose = findViewById(R.id.close_session);
         homeIpAddrInfo = findViewById(R.id.ip_addr_info);
+        homeConfirm = findViewById(R.id.home_confirm_cv);
+        mainSetText = findViewById(R.id.main_set_text);
+        tempInfo = findViewById(R.id.temp_info);
+        humidityInfo = findViewById(R.id.humidity_info);
 
         if (sp.getBoolean(getString(R.string.config_on_key), false)) {
             infoScreen.setVisibility(View.VISIBLE);
             frLay.setVisibility(View.GONE);
-            homeIpAddrInfo.setText("Home IP:   " + sp.getString(getString(R.string.address_key), ""));
+            String homeIpString = sp.getString(getString(R.string.address_key), "");
+            homeIpAddrInfo.setText(homeIpString);
+            mainSetText.setVisibility(View.VISIBLE);
         } else {
             infoScreen.setVisibility(View.GONE);
             frLay.setVisibility(View.VISIBLE);
+            mainSetText.setVisibility(View.GONE);
         }
+
+//        m404RefData.addValueEventListener(new ValueEventListener() {
+//            @Override
+//            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+//                String serverResult = dataSnapshot.getValue(String.class);
+//                Log.d("smthFound", serverResult);
+//            }
+//
+//            @Override
+//            public void onCancelled(@NonNull DatabaseError databaseError) { }
+//        });
 
         frLay.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-                DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
-                String addr = Formatter.formatIpAddress(dhcpInfo.gateway);
+                if (isConnectedToWifi()) {
+                    WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                    DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
+                    String addr = Formatter.formatIpAddress(dhcpInfo.gateway);
 
-                homeIpAddrInfo.setText("Home IP:   " + addr);
+                    homeIpAddrInfo.setText(addr);
 
-                editor.putString(getString(R.string.address_key), addr);
-                editor.putBoolean(getString(R.string.config_on_key), true);
-                editor.apply();
+                    editor.putString(getString(R.string.address_key), addr);
+                    editor.putBoolean(getString(R.string.config_on_key), true);
+                    editor.apply();
 
-                Intent notifyIntent = new Intent(getApplicationContext(), NotificationService.class);
-                startService(notifyIntent);
+                    Intent notifyIntent = new Intent(getApplicationContext(), NotificationService.class);
+                    startService(notifyIntent);
 
-                revealAnimation();
+                    revealAnimationAndCamera();
+                } else {
+                    Toast.makeText(getApplicationContext(), getString(R.string.toast_no_net), Toast.LENGTH_SHORT).show();
+                }
             }
         });
 
@@ -102,25 +144,63 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
                 editor.putBoolean(getString(R.string.config_on_key), false);
                 editor.apply();
 
+                if (mCamera2 != null) {
+                    mCamera2.pause();
+                }
+
                 reverseRevealAnimation();
             }
         });
 
-        if (checkCameraPermission()) {
-            cameraOperations();
-        }
+        homeConfirm.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editor.putBoolean(getString(R.string.confirm_btn_key), false);
+                editor.apply();
+
+                AlphaAnimation alpha = new AlphaAnimation(1f, 0f);
+                alpha.setDuration(500);
+                alpha.setInterpolator(new DecelerateInterpolator());
+                homeConfirm.startAnimation(alpha);
+                alpha.setAnimationListener(new Animation.AnimationListener() {
+                    @Override
+                    public void onAnimationStart(Animation animation) { }
+
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        homeConfirm.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animation animation) { }
+                });
+            }
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mCamera2.resume();
+
+        if (checkCameraPermission()) {
+            cameraOperations();
+        }
+
+        if (mCamera2 != null)
+            mCamera2.resume();
+
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
+        if (sp.getBoolean(getString(R.string.confirm_btn_key), false))
+            homeConfirm.setVisibility(View.VISIBLE);
+        else
+            homeConfirm.setVisibility(View.GONE);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        mCamera2.pause();
+        if (mCamera2 != null)
+            mCamera2.pause();
     }
 
     @Override
@@ -145,9 +225,7 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
     }
 
     private void registerWifiDetector() {
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION);
-        registerReceiver(mWifiDetector, intentFilter);
+        registerReceiver(mWifiDetector, new IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION));
     }
 
     private void unregisterWifiDetector() {
@@ -155,27 +233,53 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
     }
 
     private void cameraOperations() {
-        mCamera2 = new Camera2(getApplicationContext());
-        mCamera2.setOnCameraCapturedListener(this);
-        mCamera2.openCamera();
+        final SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+        if (isConnectedToWifi() && sp.getBoolean(getString(R.string.config_on_key), false)) {
+            mCamera2 = new Camera2(getApplicationContext());
+            mCamera2.setOnCameraCapturedListener(this);
+            mCamera2.openCamera();
+        }
     }
 
     @Override
-    public void onCameraCaptured(Bitmap imageBitmap, int maxNumber) {
+    public void onCameraCaptured(Bitmap imageBitmap, int currentNumber, int maxNumber) {
+        if (currentNumber == 0) {
+            mBitmaps = new ArrayList<>();
+        }
         mBitmaps.add(imageBitmap);
         if (mBitmaps.size() >= maxNumber) {
-            int trues = 0;
-            int falses = 0;
-            for (Bitmap bitmapTemp : mBitmaps) {
-                if (computeFaces(bitmapTemp)) {
-                    trues++;
-                    Log.d("smthFound", "HAPPY!!!!");
-                } else {
-                    falses++;
-                    Log.d("smthFound", "nooo...");
+            faceAnalysisThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    int pos = 0, neg = 0;
+                    for (Bitmap bitmapTemp : mBitmaps) {
+//                        Matrix matrix = new Matrix();
+//                        matrix.postRotate(-90);
+//                        bitmapTemp =  Bitmap.createBitmap(bitmapTemp, 0, 0, bitmapTemp.getWidth(), bitmapTemp.getHeight(), matrix, true);
+                        if (computeFaces(bitmapTemp)) {
+                            pos++;
+                        } else {
+                            neg++;
+                        }
+                    }
+                    if (neg < pos) {
+                        m404Ref.setValue("404-true");
+                    } else {
+                        m404Ref.setValue("404-false");
+                    }
+
+                    // Stop camera
+                    mCamera2.pause();
                 }
-            }
+            });
+            faceAnalysisThread.start();
         }
+    }
+
+    private boolean isConnectedToWifi() {
+        ConnectivityManager connMng = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connMng.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+        return networkInfo.isConnected();
     }
 
     private boolean computeFaces(Bitmap bitmap){
@@ -209,7 +313,7 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
         return false;
     }
 
-    private void revealAnimation() {
+    private void revealAnimationAndCamera() {
         if (Build.VERSION.SDK_INT >= 21) {
 
             final ScaleAnimation scale = new ScaleAnimation(
@@ -238,12 +342,29 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
                 @Override
                 public void onAnimationEnd(Animation animation) {
                     frLay.setVisibility(View.GONE);
+                    mainSetText.setVisibility(View.GONE);
                     infoScreen.setVisibility(View.VISIBLE);
                     animator.start();
                 }
 
                 @Override
                 public void onAnimationRepeat(Animation animation) { }
+            });
+
+            animator.addListener(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator animation) { }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    cameraOperations();
+                }
+
+                @Override
+                public void onAnimationCancel(Animator animation) { }
+
+                @Override
+                public void onAnimationRepeat(Animator animation) { }
             });
         } else {
             frLay.setVisibility(View.GONE);
@@ -281,6 +402,7 @@ public class MainActivity extends AppCompatActivity implements Camera2.OnCamera 
                 public void onAnimationEnd(Animator animation) {
                     infoScreen.setVisibility(View.GONE);
                     frLay.setVisibility(View.VISIBLE);
+                    mainSetText.setVisibility(View.VISIBLE);
                     frLay.startAnimation(scale);
                 }
 
